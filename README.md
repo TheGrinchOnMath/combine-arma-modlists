@@ -3,11 +3,18 @@ the objective of this project is to take several arma 3 modlist html files, comb
 
 ## Setup:
 ### For windows users:
+open a new terminal / cmd / powershell window in the `combine-arma-modlists` folder.
 run `python.exe -m venv .env`
 - for windows 10 cmd, run `.env\Scripts\activate.bat`
 - for powershell, run `.env\Scripts\Activate.ps1`
 - for windows 11 terminal, run `.env\Scripts\activate`
-then, run `pip install -r requirements.txt`. this should install the necessary library. 
+then, run `pip install -r requirements.txt`. this should install the necessary libraries. 
+
+### For linux users:
+open a new terminal in the `combine-arma-modlists` folder (or just cd into it)
+run `python3 -m venv .env
+for the default terminal on most distributions, run `source .env\Scripts\activate`
+then, run `pip install -r requirements.txt`. this should install the necessary libraries.
 
 ## Usage instructions:
 - export all the modlists you want to combine
