@@ -1,112 +1,78 @@
-#
 from bs4 import BeautifulSoup as BS
 import os
-from contextlib import chdir
+from pathlib import Path
 
-
-# function: read a html file, extract mods etc
-def read_html(PATH: str) -> dict:
-    # open file, read file, parse file
-    with open(PATH, "r") as rf:
+def read_html(path: Path) -> dict:
+    with open(path, "r", encoding="utf-8") as rf:
         soup = BS(rf, "lxml")
-        # ---- Parse Mods ---- #
+        
+        raw_contents = soup.body.div.table.contents
+        mods = [item for item in raw_contents if item != "\n"]
 
-        # extract mod list div, get the children of the mods file as a table
-        mods = soup.body.div.table.contents
-
-        # remove newlines that have popped up due to formatting
-        for mod in mods:
-            mods.remove("\n")
-
-        # create dictionary of mods, containing name, html & index
         mod_dict = {}
-        for i in range(len(mods)):
-            mod = mods[i].td
-
-            # remove excess \n\t tags (credit: "https://stackoverflow.com/a/3939381")
-            name = mod.contents[0].translate({ord(c): None for c in "\n\t"})
-
-            # create dict for each mod
-            mod_data = [name, i, mods[i]]
-            mod_dict[name] = mod_data
+        for i, mod_row in enumerate(mods):
+            mod_td = mod_row.td
+            name = mod_td.get_text().strip()
+            mod_dict[name] = [name, i, mod_row]
 
         return mod_dict
-        # -------------------- #
 
+def combine_modlists(input_dir: Path, root_dir: Path):
+    files = list(input_dir.glob("*.html"))
+    if not files:
+        return
 
-def combine_modlists(input_dir: str):
-    # parse dir, get html files
-    files = []
-    # magic by
-    # list files in dir
-    for filename in os.listdir(input_dir):
-        file = os.path.join(input_dir, filename)
-        _, ext = os.path.splitext(file)
-        if os.path.isfile(file) and ext == ".html":
-            files.append(file)
+    files_data = [read_html(f) for f in files]
+    
+    combined_mod_dict = {}
+    for d in files_data:
+        combined_mod_dict.update(d)
 
-    files_data = []
+    # Template is in the same directory as this script (src/)
+    template_path = Path(__file__).parent / "Arma 3 Preset combined mods.html"
+    
+    if not template_path.exists():
+        return
 
-    # read all files, collect dicts
-    for file_path in files:
-        data = read_html(file_path)
-        files_data.append(data)
-
-    temp_list = files_data[1:]
-    mod_dict = files_data[0]
-
-    # compare dictionaries and fuse them
-    for _dict in temp_list:
-        mod_dict.update(_dict)
-
-    # now we have to create a new modlist using the dict.
-    # copy the template html file to output
-    with open(
-        os.path.join(os.getcwd(), "src", "Arma 3 Preset combined mods.html"), "r"
-    ) as rf:
+    with open(template_path, "r", encoding="utf-8") as rf:
         template = BS(rf, "lxml")
 
-    # create a list of mod html snippets
-    html_snippets = []
-    for _, value in mod_dict.items():
-        html_snippets.append(value[2])
+    table = template.body.div.table
+    table.clear() 
+    for value in combined_mod_dict.values():
+        table.append(value[2])
 
-    # replace the modlist mods div with the combined mods
-    for snippet in html_snippets:
-        template.body.div.table.append(snippet)
+    name_file = input_dir / "mod_list_name.txt"
+    if not name_file.exists():
+        modlist_name = "Combined"
+    else:
+        modlist_name = name_file.read_text().strip()
 
-    # get the desired name for the modlist
-    with open(os.path.join(os.getcwd(), "input", "mod_list_name.txt")) as rf:
-        modlist_name = rf.read()
-        file_name = f"Arma 3 modlist {modlist_name}.html"
+    output_name = f"Arma 3 modlist {modlist_name}.html"
+    # Output to the project root (one level up from src/)
+    output_path = root_dir / output_name
 
-    # write to file
-    with open(file_name, "w") as wf:
+    with open(output_path, "w", encoding="utf-8") as wf:
         wf.write(str(template))
 
-    # cant be bothered to actually fix the parsing of the head of the file, so we are modding 3 lines to conform to the original structure.
-    with open(file_name, "r") as file:
-        lines = file.readlines()
-        lines[0] = '<?xml version="1.0" encoding="utf-8"?><html>'
-        lines[2] = "<head>"
-        lines[4] = f'<meta name="arma:PresetName" content="{modlist_name}" />'
-        lines[78] = "</style></head><body>"
+    with open(output_path, "r", encoding="utf-8") as rf:
+        lines = rf.readlines()
 
-    with open(file_name, "w") as file:
-        file.writelines(lines)
+    if len(lines) > 78:
+        lines[0] = '<?xml version="1.0" encoding="utf-8"?><html>\n'
+        lines[2] = "<head>\n"
+        lines[4] = f'<meta name="arma:PresetName" content="{modlist_name}" />\n'
+        lines[78] = "</style></head><body>\n"
 
-    # get dictionary for each file, inside a list for convenience
+    with open(output_path, "w", encoding="utf-8") as wf:
+        wf.writelines(lines)
 
-
-# check if in src directory cuz doofus users
-CWD = os.getcwd()
-full_CWD = CWD.split(os.path.sep)
-if full_CWD[-1] == "src":
-    with chdir(".."):
-        path = os.path.join(os.getcwd(), "input")
-
-        combine_modlists(path)
-else:
-    path = os.path.join(os.getcwd(), "input")
-
-    combine_modlists(path)
+if __name__ == "__main__":
+    # Internal path resolution
+    script_path = Path(__file__).resolve()
+    # Since main.py is in src/, parent is src/, and parent.parent is root
+    root_dir = script_path.parent.parent
+    input_path = root_dir / "input"
+    
+    if input_path.exists():
+        combine_modlists(input_path, root_dir)
